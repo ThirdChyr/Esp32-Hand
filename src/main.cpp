@@ -5,11 +5,30 @@
 
 WiFiClient client;
 PubSubClient mqtt(client);
-volatile bool first_signal = true;
-volatile bool isMotionDetected = false;
+
+int time_prev = 0;
+int countdown = 5;
+volatile bool Get_value = false;
 volatile int motionCount = 0;
 String message = "";
+String Result = "";
 String Answer[Ansarray_SIZE];
+void callback(char* topic, byte* payload, unsigned int length) {
+  Serial.print("Message arrived [");
+  Serial.print(topic);
+  Serial.print("]: ");
+  for (int i = 0; i < length; i++) {
+    message += (char)payload[i];
+  }
+  if(strcmp(topic,Input_Topic) == 0 && Get_value == false && message =="begin")
+  {
+    Get_value = true;
+  }
+  
+  Serial.println(message);
+  
+}
+
 bool thrump_finger_bend()
 {
   int thrump_adc = analogRead(thrump_finger);
@@ -119,19 +138,9 @@ String prediction()
   }
 }
 
-void setup() {
-  Serial.begin(115200);
-  Serial.println("Setup complete");
-
-  WiFi.begin(ssid, password);
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(1000);
-    Serial.println("Connecting to WiFi...");
-  }
-}
-
-void loop() {
-  int value_thrump = analogRead(thrump_finger);
+void show_monitor()
+{
+   int value_thrump = analogRead(thrump_finger);
   int value_index = analogRead(index_finger);
   int value_middle = analogRead(middle_finger);
   int value_ring = analogRead(ring_finger);
@@ -150,7 +159,55 @@ void loop() {
   Serial.println("===============Result===============");
   Serial.println(prediction());
   Serial.println("===============End===============");
+}
 
-  delay(5000);
+void setup() {
+  Serial.begin(115200);
+  Serial.println("Setup complete");
+
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(1000);
+    Serial.println("Connecting to WiFi...");
+  }
+
+  mqtt.setServer(mqtt_server, mqtt_port);
+  mqtt.setCallback(callback);
+}
+
+void loop() {
+  if (mqtt.connected() == false) 
+  {
+    Serial.print("MQTT connection... ");
+    if (mqtt.connect(MQTT_NAME, MQTT_USERNAME, MQTT_PASSWORD)) {
+      Serial.println("connected");
+      mqtt.subscribe(Output_Topic);
+      mqtt.subscribe(Input_Topic);
+    } else {
+      Serial.println("failed");
+      delay(5000);
+    }
+  } else {
+    mqtt.loop();
+  }
+  if(millis() - time_prev > 1000)
+  {
+    time_prev = millis();
+    show_monitor();
+    if(Get_value)
+    {
+      Result = prediction();
+      countdown--;
+      if(countdown <= 0)
+      {
+        mqtt.publish(Output_Topic, Result.c_str());
+        countdown = 5;
+        Get_value = false;
+        Result = "";
+        message = "";
+      }
+    }
+  }
+
 }
 
