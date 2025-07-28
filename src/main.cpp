@@ -17,6 +17,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
   Serial.print("Message arrived [");
   Serial.print(topic);
   Serial.print("]: ");
+  message = ""; // Clear message before building new one
   for (int i = 0; i < length; i++) {
     message += (char)payload[i];
   }
